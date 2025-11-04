@@ -3,24 +3,78 @@
 
     var select, spinner, updated, manifest;
 
-    // This changes every once in a while
-    var selector = '#invoice_header > div:nth-child(2)';
+    // This changes every once in a while - try multiple selectors
+    var selectors = [
+        '#invoice-header .pds-column-4 .pds-flex-list',    // Modern layout - action buttons container
+        '#invoice-header .pds-flex-list.pds-justify-end',  // Alternative action buttons area
+        'header.pds-row .pds-column-4 .pds-flex-list',     // Generic header with action buttons
+        '#invoice_header > div:nth-child(2)',               // Old layout
+        '#invoice_header',                                  // Try the header itself
+        '#invoice-header',                                  // Modern header ID
+        '.invoice-header',                                  // Alternative class-based selector
+        '[data-testid="invoice-header"]',                   // Modern React/test ID pattern
+        'header.pds-screen-only .pds-flex-list',           // Any screen-only header with flex-list
+        'main header',                                      // Any header in main content (fallback)
+        'body > div > div > header',                        // Common React app structure
+        'body > div:first-child > div > div:first-child'   // Fallback to body structure
+    ];
 
-    init();
+    // Wait for page to be ready before initializing
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(init, 1500);
+        });
+    } else {
+        // DOM is already ready, wait a bit for dynamic content to load
+        setTimeout(init, 1500);
+    }
 
     ///
 
     function init() {
-        top.loaded = loadLanguages()
-            .then(insertUIElements)
-            .catch(function(e) {
-                console.warn(manifest.name, manifest.version, 'Could not load languages', e);
-            });
-        loadManifest()
-            .then(displayReadyMessage)
-            .catch(function(e) {
-                console.warn(manifest.name, manifest.version, 'Could not display ready message', e);
-            });
+        loadManifest().then(function() {
+            console.info(manifest.name, manifest.version, 'Initializing...');
+
+            top.loaded = loadLanguages()
+                .then(function(languages) {
+                    // Try immediately
+                    return tryInsertUIElements(languages, 0);
+                })
+                .catch(function(e) {
+                    console.warn(manifest.name, manifest.version, 'Could not load languages', e);
+                });
+        }).catch(function(e) {
+            console.warn('Could not load manifest', e);
+        });
+    }
+
+    function tryInsertUIElements(languages, attempt) {
+        var maxAttempts = 8;
+        var retryDelay = 500;
+
+        try {
+            insertUIElements(languages);
+            displayReadyMessage();
+            return Promise.resolve();
+        } catch(e) {
+            if (attempt < maxAttempts) {
+                console.info(manifest.name, 'Attempt', attempt + 1, 'failed, retrying in', retryDelay, 'ms...');
+                return new Promise(function(resolve, reject) {
+                    setTimeout(function() {
+                        tryInsertUIElements(languages, attempt + 1)
+                            .then(resolve)
+                            .catch(reject);
+                    }, retryDelay);
+                });
+            } else {
+                console.error(manifest.name, manifest.version, 'Could not load languages after', maxAttempts, 'attempts', e);
+                throw e;
+            }
+        }
+    }
+
+    function displayReadyMessage() {
+        console.info(manifest.name, manifest.version, 'loaded successfully');
     }
     function loadManifest() {
         return new Promise(function(resolve, reject) {
@@ -30,7 +84,7 @@
 
     function loadLanguages() {
         return new Promise(function(resolve, reject) {
-            fetch(chrome.extension.getURL('/languages.json'))
+            fetch(chrome.runtime.getURL('/languages.json'))
                 .then(function(response) {
                     response.json()
                         .then(resolve)
@@ -42,7 +96,7 @@
 
     function loadLanguage(locale) {
         return new Promise(function(resolve, reject) {
-            fetch(chrome.extension.getURL('/languages/' + locale + '.json'))
+            fetch(chrome.runtime.getURL('/languages/' + locale + '.json'))
                 .then(function(response) {
                     response.json()
                         .then(resolve)
@@ -57,18 +111,36 @@
     }
 
     function appendSelect(select) {
-        var target = $(selector);
+        var target = null;
 
-        if (target.length !== 1) {
-            throw new Error('Cannot attach UI elements');
+        // Try each selector until we find one that works
+        for (var i = 0; i < selectors.length; i++) {
+            var testTarget = $(selectors[i]);
+            if (testTarget.length > 0) {
+                target = testTarget.first();
+                console.info(manifest.name, 'Found attachment point using selector:', selectors[i]);
+                break;
+            }
         }
 
-        target.prepend(select);
+        if (!target || target.length === 0) {
+            console.error(manifest.name, 'Could not find attachment point. Tried selectors:', selectors);
+            console.error(manifest.name, 'Page body HTML:', $('body').html().substring(0, 500));
+            throw new Error('Cannot attach UI elements - no valid selector found');
+        }
+
+        // If we found the flex-list container, append (add to end), otherwise prepend (add to start)
+        if (target.hasClass('pds-flex-list')) {
+            target.append(select);
+        } else {
+            target.prepend(select);
+        }
+        console.info(manifest.name, 'Language selector attached successfully');
     }
 
     function getSpinner() {
         return spinner = $('<img id="harvest-language-loading" ' +
-                           'src="' + chrome.extension.getURL('/content/images/spinner.gif') + '">')
+                           'src="' + chrome.runtime.getURL('/content/images/spinner.gif') + '">')
             .hide();
     }
 
@@ -81,22 +153,25 @@
         appendSelect(wrapper);
     }
 
-    function displayReadyMessage() {
-        console.info(manifest.name, manifest.version, 'loaded');
-    }
-
     function addOption(select, value, label) {
         select.append('<option value="' + value + '">' + label + '</option>');
     }
 
     function getSelectWrapper(spinner, select) {
+        var icon = $('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;">' +
+            '<circle cx="12" cy="12" r="10"/>' +
+            '<line x1="2" y1="12" x2="22" y2="12"/>' +
+            '<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>' +
+            '</svg>');
+
         var wrapper = $('<span ' +
             'title="Change language" ' +
             'id="harvest-language-selector" ' +
-            'class="btn-action btn-pill btn-invoice-action" ' +
+            'class="pds-button pds-button-sm" ' +
+            'style="display: inline-flex; align-items: center; padding: 0 12px;" ' +
             '></span>');
 
-        return wrapper.append(spinner).append(select);
+        return wrapper.append(icon).append(spinner).append(select);
     }
 
     function getSelect(languages) {

@@ -4,7 +4,8 @@
   "description": "Simple Translation support for Harvest",
   "main": "index.js",
   "scripts": {
-    "build": "bestzip dist/build.zip src/"
+    "build": "rm -rf dist/* && cp -r src/* dist/",
+    "zip": "bestzip dist/build.zip src/"
   },
   "repository": {
     "type": "git",

@@ -1,19 +1,32 @@
 #harvest-language-loading {
-    height: 20px;
-    margin: 0 20px;
+    height: 16px;
+    width: 16px;
+    margin-right: 6px;
+    display: inline-block;
+    vertical-align: middle;
 }
 
 #harvest-language-selector {
-    position: absolute;
-    margin-top: 50px;
-    max-width: 220px;
-    text-align: center;
+    display: inline-flex !important;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
 }
 
 #harvest-language-selector select {
-    max-width: 100%;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
 }
 
-#invoice_header {
-    margin: 0 0 50px 0 !important;
+#harvest-language-selector select:focus {
+    outline: none;
 }
